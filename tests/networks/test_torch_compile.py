@@ -197,7 +197,11 @@ class TestTorchCompileCompatibility(unittest.TestCase):
         )
 
     @parameterized.expand(
-        [[network_class, init_kwargs, input_shape, mode] for network_class, init_kwargs, input_shape in TEST_CASES for mode in COMPILE_MODES]
+        [
+            [network_class, init_kwargs, input_shape, mode]
+            for network_class, init_kwargs, input_shape in TEST_CASES
+            for mode in COMPILE_MODES
+        ]
     )
     def test_network_compile_modes(self, network_class, init_kwargs, input_shape, mode):
         """Test that networks work with different compile modes."""
