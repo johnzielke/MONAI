@@ -159,6 +159,46 @@ TEST_CASES = [
 # Test different compile modes
 COMPILE_MODES = [None, "default", "reduce-overhead", "max-autotune"]
 
+# Test cases for dynamic shapes: [network_class, init_kwargs, list_of_input_shapes]
+DYNAMIC_SHAPE_TEST_CASES = [
+    # 2D UNet with varying spatial dimensions
+    [
+        UNet,
+        {"spatial_dims": 2, "in_channels": 1, "out_channels": 2, "channels": (8, 16), "strides": (2,)},
+        [(2, 1, 32, 32), (2, 1, 48, 48), (2, 1, 64, 64), (1, 1, 40, 40)],
+    ],
+    # 3D UNet with varying spatial dimensions
+    [
+        UNet,
+        {"spatial_dims": 3, "in_channels": 1, "out_channels": 2, "channels": (8, 16), "strides": (2,)},
+        [(2, 1, 16, 16, 16), (2, 1, 24, 24, 24), (1, 1, 20, 20, 20)],
+    ],
+    # BasicUNet 2D with varying shapes
+    [
+        BasicUNet,
+        {"spatial_dims": 2, "in_channels": 1, "out_channels": 2, "features": (8, 8, 16, 16, 32, 32)},
+        [(2, 1, 32, 32), (2, 1, 64, 64), (1, 1, 48, 48)],
+    ],
+    # BasicUNet 3D with varying shapes
+    [
+        BasicUNet,
+        {"spatial_dims": 3, "in_channels": 1, "out_channels": 2, "features": (8, 8, 16, 16, 32, 32)},
+        [(2, 1, 16, 16, 16), (2, 1, 24, 24, 24), (1, 1, 20, 20, 20)],
+    ],
+    # SegResNet 2D with varying shapes
+    [
+        SegResNet,
+        {"spatial_dims": 2, "in_channels": 1, "out_channels": 2, "init_filters": 8},
+        [(2, 1, 32, 32), (2, 1, 48, 48), (1, 1, 40, 40)],
+    ],
+    # SegResNet 3D with varying shapes
+    [
+        SegResNet,
+        {"spatial_dims": 3, "in_channels": 1, "out_channels": 2, "init_filters": 8},
+        [(2, 1, 16, 16, 16), (2, 1, 24, 24, 24), (1, 1, 20, 20, 20)],
+    ],
+]
+
 
 @unittest.skipUnless(has_torch_compile, "torch.compile not available (requires PyTorch 2.0+)")
 class TestTorchCompileCompatibility(unittest.TestCase):
@@ -279,6 +319,28 @@ class TestTorchCompileCompatibility(unittest.TestCase):
 
         self.assertIsNotNone(output)
         self.assertIsInstance(output, torch.Tensor)
+
+    @parameterized.expand(DYNAMIC_SHAPE_TEST_CASES)
+    def test_dynamic_shapes(self, network_class, init_kwargs, input_shapes):
+        """Test that compiled models support dynamic shapes."""
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Create and compile model once
+        model = network_class(**init_kwargs).to(device)
+        model.eval()
+        compiled_model = torch.compile(model)
+
+        # Test with multiple different shapes
+        for shape in input_shapes:
+            x = torch.randn(shape, device=device)
+            with torch.no_grad():
+                output = compiled_model(x)
+
+            # Verify output is valid
+            self.assertIsNotNone(output, f"{network_class.__name__} returned None for shape {shape}")
+            self.assertIsInstance(
+                output, torch.Tensor, f"{network_class.__name__} did not return a Tensor for shape {shape}"
+            )
 
 
 if __name__ == "__main__":
